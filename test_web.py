@@ -129,7 +129,11 @@ class WebTests(unittest.TestCase):
         state = json.loads(body)
         self.assertIn("disk", state)
         self.assertIn("reminders", state)
-        self.assertIsNone(state["gpu"])
+        # Actual macOS runners may expose GPU metadata through ioreg.
+        # Either an unavailable GPU or a structured reading is valid.
+        if state["gpu"] is not None:
+            self.assertIsInstance(state["gpu"], dict)
+            self.assertIsInstance(state["gpu"]["name"], str)
         self.assertFalse(state["busy"])
 
     def test_validate_json_content_and_limits(self) -> None:

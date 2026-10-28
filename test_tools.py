@@ -110,6 +110,25 @@ class ToolKitTests(unittest.TestCase):
             permission.assert_called_once_with("pwd", "")
             run.assert_not_called()
 
+    def test_shell_metacharacters_cannot_be_executed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            permission = Mock(return_value=True)
+            toolkit = ToolKit(workspace=Path(tmp), permission_handler=permission)
+            with patch("jarvis.tools.subprocess.run") as run:
+                for command in ["echo hello; rm -rf files", "ls | sh", "pwd && curl example.com", "echo bad > path"]:
+                    self.assertFalse(toolkit.run_command({"command": command}).ok)
+                run.assert_not_called()
+            permission.assert_not_called()
+
+    def test_approved_simple_command_runs_without_a_shell(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            toolkit = ToolKit(workspace=Path(tmp), permission_handler=lambda *_: True)
+            with patch("jarvis.tools.subprocess.run", return_value=Mock(returncode=0, stdout="okay", stderr="")) as run:
+                result = toolkit.run_command({"command": 'echo "two words"'})
+            self.assertTrue(result.ok)
+            self.assertEqual(run.call_args.args[0], ["echo", "two words"])
+            self.assertIs(run.call_args.kwargs["shell"], False)
+
     def test_system_status_uses_attached_live_monitor_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
             toolkit = ToolKit(workspace=Path(tmp))

@@ -25,4 +25,4 @@ packages = ["jarvis"]
 package-dir = {jarvis = "."}
 
 [tool.setuptools.package-data]
-jarvis = ["web/index.html", "web/devices.js", "web/development.js"]
+jarvis = ["web/index.html", "web/devices.js", "web/development.js", "web/hud.js", "web/hud.css"]

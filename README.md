@@ -87,7 +87,9 @@ python3 -m jarvis --doctor
 
 Voice mode records bounded utterances, accepts a command after "Jarvis", closes the microphone during the reply, and waits briefly before listening again. Say the name alone to open a 15-second window for your next utterance. Use Ctrl-C to stop. `--listen` speaks replies automatically. The local web interface generates speech on your Mac and plays it in the browser, using the same installed voice.
 
-The web server binds only to `127.0.0.1`. The local orb shows approval cards for self-development tests, installation, rollback, and custom tool execution. Shell commands, desktop input, Google changes, and browser clicks/fills still require CLI approval. `--once`, `--listen`, `--web`, and `--menubar` are separate modes.
+The web server binds only to `127.0.0.1`. Its approval cards cover individual controlled computer actions as well as self-development tests, installation, rollback, and custom tool execution. Shell execution uses parsed argument lists (not a shell) and rejects chaining, pipes, and redirection. `--once`, `--listen`, `--web`, and `--menubar` are separate modes.
+
+**Command approval is not a sandbox.** Approving an arbitrary interpreter or file-editing executable can still change Jarvis's own source code outside the self-development review workflow. Inspect the entire command and only approve programs you trust; use the self-development review panel for proposed source changes.
 
 ## Update an existing installation
 
@@ -121,7 +123,7 @@ Open the local orb at **http://127.0.0.1:8765**. All device controls start **off
 
 Camera and screen analysis uses an explicit snapshot and question sent to your local Ollama vision model. Enabling a preview alone does not continuously analyze it. Microphone input uses an explicit bounded recording, transcribed locally by Whisper; it pauses while Jarvis speaks. Turning a source off suppresses results from its pending captures.
 
-Grant camera and microphone access when your browser asks. For screen sharing, allow the browser in **System Settings → Privacy & Security → Screen & System Audio Recording** (called **Screen Recording** on older macOS), then restart the browser if prompted. These controls require the local Python application. The Cloudflare preview keeps hardware controls disabled.
+Grant camera and microphone access when your browser asks. For screen sharing, allow the browser in **System Settings → Privacy & Security → Screen & System Audio Recording** (called **Screen Recording** on older macOS), then restart the browser if prompted. These controls require the local Python application. The Cloudflare deployment does not offer computer hardware controls.
 
 ## Memory, reminders, and research
 
@@ -210,7 +212,7 @@ For protected folders, go to **System Settings → Privacy & Security → Full D
 ## Install from a fresh clone
 
 ```bash
-git clone https://github.com/arcfieldlabs-hash/J.A.R.V.I.S. jarvis
+git clone https://github.com/exodusaero/J.A.R.V.I.S. jarvis
 cd jarvis
 python3 -m venv .venv
 source .venv/bin/activate
@@ -267,11 +269,13 @@ Google native: put OAuth desktop credentials at `~/.jarvis/google/credentials.js
 
 ## Cloudflare deployment
 
-Cloudflare can host the static orb interface as a preview. The repository's
-`wrangler.jsonc` points to `./web`; run `npm ci` and `npm run check` to validate it
-locally. Follow [Cloudflare-deployment.md](Cloudflare-deployment.md) for the exact
-build settings and branch to deploy. Chat, Ollama, memory, telemetry, desktop
-tools, hardware controls, and self-development run in the local Python application on your Mac. The hosted preview keeps development controls disabled.
+Cloudflare hosts the cinematic interface together with a **separate, Access-protected**
+Workers AI backend. The model is Cloudflare's Llama 3.1 8B, not the model behind
+ChatGPT Plus; its daily free allocation is limited. Cloudflare Access must be
+configured before cloud chat works. `npm ci`, `npm test`, and `npm run check`
+validate the deployment locally without publishing. Read
+[Cloudflare-deployment.md](Cloudflare-deployment.md) for authentication,
+deployment, testing, costs, and the local-companion architecture.
 
 ## Validation
 

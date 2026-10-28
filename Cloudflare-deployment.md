@@ -1,73 +1,88 @@
-# Cloudflare interface preview
+# J.A.R.V.I.S. — Cloudflare deployment (private AI)
 
-Cloudflare hosts the static orb interface from `web/index.html`. The hosted page
-identifies itself as an interface preview and links to the local assistant at
-`http://127.0.0.1:8765`. Chat, local model inference, memory, reminders, telemetry,
-and Mac desktop tools run in the Python application on your Mac; this deployment
-does not provide an online assistant backend.
+The Cloudflare build is an original, interactive cinematic HUD with a separate
+Cloudflare Workers AI conversation endpoint. It does **not** use ChatGPT Plus,
+does not expose the user's Mac files or devices, and does not run Ollama in the
+cloud. The optional local Python companion remains separate.
 
-## Fix the static-files detection error
+## 1. Protect the Worker with Cloudflare Access **before enabling inference**
 
-The error `Could not detect a directory containing static files` means Wrangler
-could not locate an asset directory. This repository's `wrangler.jsonc` explicitly
-sets `assets.directory` to `./web`. No JavaScript Worker entry point or frontend
-compilation is needed for this assets-only deployment.
+In your Cloudflare account, activate Zero Trust if needed, and create a
+Cloudflare Access application that protects the entire `j-a-r-v-i-s` Worker,
+including the production hostname, custom domains, and preview deployments.
+Set its **Allow** policy to only your own verified account/email. Do **not**
+choose an Everyone policy. Check authorized and unauthorized access yourself.
 
-Use the branch containing both `wrangler.jsonc` and `web/index.html`. These files
-are in PR #1 on `feat/blueprint-capabilities`; `main` will contain them after the PR
-is merged. Retrying an earlier commit without these files repeats the error.
+Cloudflare docs: [Protect a Worker with Access](https://developers.cloudflare.com/workers/configuration/cloudflare-access/).
 
-In the correct Cloudflare account, open **Workers & Pages → j-a-r-v-i-s → Settings
-→ Build** and set:
+The Worker also validates Cloudflare's signed identity token on every API call;
+without all three settings below it denies all AI requests, even if someone
+accidentally makes the site publicly reachable.
 
-| Setting | Value |
+Set these two non-secret environment variables on the Worker in the Cloudflare
+dashboard, or with Wrangler, to exactly match the Access application:
+
+| Name | Required value |
 | --- | --- |
-| Connected repository | `arcfieldlabs-hash/J.A.R.V.I.S.` |
-| Production branch | `feat/blueprint-capabilities` to test PR #1; `main` after merging |
-| Root directory | Repository root (leave empty) |
-| Build command | Leave empty |
-| Deploy command | `npx wrangler deploy` |
-| Build environment variable | `NODE_VERSION=22` |
+| `TEAM_DOMAIN` | `https://YOUR-TEAM.cloudflareaccess.com` |
+| `POLICY_AUD` | Your Access application's audience (AUD) tag |
+| `OWNER_EMAIL` | Your exact verified sign-in email, used for an additional owner-only check |
 
-Cloudflare installs the npm dependencies using the committed `package-lock.json`.
-The page is plain HTML with inline CSS and JavaScript, so no separate build step
-or output directory setting is required. Wrangler uses the configured `./web`
-directory relative to the repository root.
+Never enter these as sample placeholders. You can find the AUD tag under
+Zero Trust → Access → Applications → your application → Additional settings.
+They identify the policy and owner, but do not grant access by themselves. Sign-in is
+handled by Cloudflare Access, not by a custom Jarvis password form.
 
-After saving the settings, deploy the latest commit on that branch from the
-deployment history. Confirm the build log detects `wrangler.jsonc`, uploads the
-assets, and reports a successful deployment. Open the Worker URL and check that
-the page says it is an interface preview. A successful deployment has not been
-verified until Cloudflare reports success for the new commit.
+**Warning:** A deployment with an incorrect Access policy may allow unwanted
+visitors to reach the static page. The API still fails closed without a valid
+signed Access JWT, but keep the whole site protected for privacy.
 
-If a later build reports an authentication error, check that the Git connection
-can read this repository and that the build's deployment token belongs to the
-correct Cloudflare account and has access to this Worker. Do not store account
-tokens or credentials in the repository.
+## 2. Deploy the Cloudflare Worker
 
-## Check locally
+The repository already has `wrangler.jsonc`: `main` points to the Worker, the
+`AI` binding provides model inference, and static assets come from `./web`.
+For a Git-integrated build, select the repository's desired branch, keep the
+root directory at repository root, and use **`npx wrangler deploy`** as the
+deploy command. No separate frontend build is required.
 
-Use Node.js 22 or newer:
+From your own machine, with Cloudflare authentication configured:
 
 ```bash
 npm ci
-npm run check
-npm run dev
+npm test
+npm run check    # dry-run only
+npm run deploy   # live deployment; requires your explicit approval
 ```
 
-`npm run check` validates the configuration with a deployment dry run; it does
-not publish. `npm run dev` serves the preview locally, normally at
-`http://localhost:8787`. Neither command starts the Python assistant.
+Test the protected hostname using an allowed identity, then an unauthorized
+browser/private session. The allowed account should get a conversation reply;
+an unauthorized browser must fail at the Access login/policy stage, and
+direct requests to `/api/chat` without an Access JWT must return HTTP 403.
 
-To use chat and the local assistant, start Jarvis on your Mac:
+## Cost and model disclosure
+
+- The current model is Cloudflare-hosted `@cf/meta/llama-3.1-8b-instruct-fp8`.
+- Workers AI provides a daily Free-plan Neuron allocation; exceeding it means
+  inference fails until reset (unless you deliberately choose a paid plan).
+- This is **not ChatGPT/GPT-6** and does **not** consume your ChatGPT Plus usage.
+- Conversation state is held only in the active browser tab (up to 12 recent
+  messages sent with each prompt); the Worker stores no chat transcripts.
+- Do not enter secrets, company confidential data, or protected research into
+  the Cloudflare AI chat unless you have reviewed its applicable data terms.
+
+See [Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
+
+## Local companion
+
+The Cloudflare site cannot read process usage or files from a visitor's Mac.
+To use those capabilities, start the Python assistant locally instead:
 
 ```bash
+python3 -m pip install -e .
+ollama pull llama3.2:3b
 python3 -m jarvis --web --speak
 ```
 
-Then open `http://127.0.0.1:8765`. Keep the Python server bound to loopback. A full
-online assistant would need a separately designed backend for model inference,
-authentication, persistence, and permissions; Workers does not run this Mac's
-Ollama process, desktop tools, or SQLite database.
-
-Reference: [Cloudflare Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/).
+Open `http://127.0.0.1:8765`. Mac commands require explicit one-use approval
+cards; code development approvals are separate. Never expose the loopback
+server directly to the public Internet.

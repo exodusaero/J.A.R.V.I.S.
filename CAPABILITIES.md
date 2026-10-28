@@ -19,12 +19,14 @@ The existing assistant runs on macOS with a local Ollama model and macOS speech.
 | Modular architecture | Separate brain, memory, voice, speech, media, browser, research, monitoring, GPU, self-development, UI and dispatch modules | Core dependency is `psutil`; heavier integrations installed as extras. Extensions define `run(args, context)` and return JSON-compatible results; their catalog refreshes at startup and after installation. |
 | Diagnostics and recovery | `--doctor`, Ollama JSON output, useful timeout/setup errors, bounded queues, cleanup | No model inference/hardware checks in automated tests. |
 
-The preview mentions ~50 tools and a Flask/Socket.IO backend, Chroma vectors, a Markdown vault, Claude prompt caching, and XTTS cloning. It supplies no implementation detail for them. This update uses the smaller existing stack: SQLite relevance search and a loopback HTTP interface with polling. Camera and screen snapshots now use a separate local vision model. Voice cloning, XTTS training, CAD agents, meeting integration, multi-hour academic research, and cloud hosting of the assistant backend remain future work.
+The preview mentions ~50 tools and a Flask/Socket.IO backend, Chroma vectors, a Markdown vault, Claude prompt caching, and XTTS cloning. It supplies no implementation detail for them. The local assistant uses SQLite relevance search and a loopback HTTP interface with polling. Camera and screen snapshots use a separate local vision model. Voice cloning, XTTS training, CAD agents, meeting integration, and multi-hour academic research remain future work. Cloudflare hosts a separate, restricted text-conversation backend, not the full local agent.
 
-Cloudflare can publish the orb as a static interface preview using the repository's
-Wrangler configuration. It shows a link to local Jarvis and keeps chat, telemetry,
-storage, hardware, and self-development controls disabled without the local Python backend. See
-[Cloudflare-deployment.md](Cloudflare-deployment.md) for the build settings.
+Cloudflare can host the interactive HUD and a Workers AI chat backend. Cloudflare
+Access identity tokens are verified for each AI request, with no model available
+until the operator sets up a restrictive Access policy and its environment
+settings. This cloud model is Llama 3.1 8B, not ChatGPT Plus, and the cloud
+endpoint has no file, hardware, shell, or self-development powers. See
+[Cloudflare-deployment.md](Cloudflare-deployment.md) for setup and limitations.
 
 ## Local operation
 
@@ -32,8 +34,8 @@ storage, hardware, and self-development controls disabled without the local Pyth
 - Keep model caches outside OneDrive, Dropbox, and Google Drive sync folders.
 - Choose a 3B-class model on a 16GB Mac. Background research never launches another language model.
 - Conversations are retained locally, and saved facts and recent history are sent to the configured Ollama endpoint as context. Do not save credentials or access tokens.
-- The web UI uses a loopback binding, session token, Host/Origin checks, and text-only rendering. It shows approval cards for self-development and custom tool execution; other controlled actions still require the CLI.
+- The local web UI uses a loopback binding, session token, Host/Origin checks, and text-only rendering. It shows one-use expiring approval cards for individual controlled actions, including shell commands, as well as self-development and extension execution. Approval is not a process sandbox: inspect exact commands before accepting them.
 - Broader storage and code changes are separate opt-in permissions. Use `:permissions`, `:access on/off`, and `:develop on/off` in the terminal, or the local orb's switches. macOS Full Disk Access and browser camera, microphone, and screen permissions remain under System Settings and browser control.
 - Development proposals and backups live under `<data-dir>/selfdev/`; installed custom tools live under `<data-dir>/extensions/`. Dependency installation and GitHub publication remain manual steps or approved CLI shell actions.
-- Camera, microphone, and screen access start off and require explicit browser consent. Recording and snapshot analysis are initiated by the user; media is processed through local services rather than the hosted preview.
+- Camera, microphone, and screen access start off and require explicit browser consent. Recording and snapshot analysis are initiated by the user; media is processed through local services rather than the hosted Cloudflare backend.
 - Research honors configured HTTP proxies. Direct public-page connections use checked destination addresses; browser URL checks do not provide equivalent DNS pinning.

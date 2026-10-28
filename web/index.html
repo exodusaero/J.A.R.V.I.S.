@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='23' fill='%23071622' stroke='%2348ccff' stroke-width='3'/%3E%3C/svg%3E">
   <title>JARVIS · Local command center</title>
+  <link rel="stylesheet" href="/hud.css">
   <style>
     :root { color-scheme:dark; --bg:#050b13; --panel:#0a1622; --ink:#d5e9f8; --muted:#8194a6; --blue:#48ccff; --line:#163248; }
     [hidden] { display:none!important; }
@@ -47,11 +48,17 @@
   </header>
   <main>
     <section aria-label="Orb and telemetry">
-      <div class="orb-stage">
-        <div class="eyebrow">Private assistant · local session</div>
-        <canvas id="orb" aria-label="Animated blue particle orb"></canvas>
-        <h2 id="orb-caption" class="orb-caption">At your service, Sir.</h2>
+      <div class="orb-stage" id="hologram-stage">
+        <div class="hud-upper"><span>STARK-INSPIRED / ORIGINAL INTERFACE</span><span id="hud-clock">LOCAL · --:--:--</span></div>
+        <div class="hud-lattice" aria-hidden="true"></div>
+        <div class="eyebrow" id="reactor-label">J.A.R.V.I.S. / CORE SYSTEM</div>
+        <canvas id="orb" tabindex="0" role="img" aria-label="Interactive three-dimensional reactor schematic. Drag or use arrow keys to rotate; scroll, pinch, or use zoom controls to zoom."></canvas>
+        <div class="hud-readout hud-readout-left" aria-hidden="true"><span>NEURAL INTERFACE</span><strong id="hud-mode">WORKSPACE</strong><small>VECTOR SPACE · XYZ</small></div>
+        <div class="hud-readout hud-readout-right" aria-hidden="true"><span>ENGINE STATUS</span><strong id="hud-engine">STANDBY</strong><small id="hud-scale">OPTIC SCALE 100%</small></div>
+        <div class="orb-caption-wrap"><span class="status-pip" aria-hidden="true"></span><h2 id="orb-caption" class="orb-caption">At your service, Sir.</h2></div>
         <p id="orb-note" class="orb-note">Text input ready · microphone is off</p>
+        <div class="hud-controls" aria-label="Hologram controls"><button type="button" id="hud-zoom-out" aria-label="Zoom hologram out">−</button><button type="button" id="hud-reset">RESET VIEW</button><button type="button" id="hud-zoom-in" aria-label="Zoom hologram in">+</button><button type="button" id="hud-focus" aria-pressed="false">ANALYSE</button></div>
+        <div class="hud-hint">DRAG TO ROTATE <span>·</span> SCROLL / PINCH TO ZOOM <span>·</span> <kbd>⌘</kbd><kbd>K</kbd> COMMANDS</div>
       </div>
       <div class="telemetry" aria-label="System telemetry">
         <div class="metric"><div class="label">CPU</div><div id="cpu" class="value">—</div><div id="cpu-detail" class="detail">Waiting for metrics</div><div class="meter"><span id="cpu-meter"></span></div></div>
@@ -69,13 +76,13 @@
       </section>
       <section id="device-panel" aria-label="Camera, microphone and screen controls"></section>
       <section id="development-panel" aria-label="Code development and approvals"></section>
-      <div class="policy">Controlled actions require approval in the CLI. Device controls are separate from display modes.</div>
+      <div class="policy">Computer actions require an explicit, expiring approval in the local interface. Device access is opt-in, and display modes do not activate your microphone or camera.</div>
       <div id="monitor-errors" class="policy" role="status"></div>
     </section>
     <section class="conversation" aria-label="Conversation">
-      <div class="conversation-top"><h1>Conversation</h1><span id="turn-state" class="eyebrow">Ready</span></div>
+      <div class="conversation-top"><div><span class="eyebrow">COMMUNICATION LINK / 01</span><h1>Conversation</h1></div><span id="turn-state" class="eyebrow">Ready</span></div>
       <div id="messages" role="log" aria-live="polite" aria-relevant="additions">
-        <div class="message"><span class="speaker">JARVIS</span><p>Good evening, Sir. How may I assist?</p></div>
+        <div class="message"><span class="speaker">JARVIS</span><p>At your service, Sir. How may I assist?</p></div>
       </div>
       <div class="composer">
         <div id="preview-guide" class="preview-guide" hidden>
@@ -84,6 +91,7 @@
           <a href="http://127.0.0.1:8765" target="_blank" rel="noopener noreferrer">Open local Jarvis</a>
         </div>
         <form id="chat-form"><input type="text" id="prompt" aria-label="Message to JARVIS" placeholder="Ask JARVIS…" autocomplete="off" required><button id="send" type="submit">Send</button></form>
+        <div class="quick-actions" id="quick-actions" aria-label="Quick commands"><button type="button" data-command="Give me a concise status report using current system metrics.">SYSTEM REPORT</button><button type="button" data-command="What can you help me with on this computer right now?">CAPABILITIES</button><button type="button" data-command="Help me plan my next engineering task step by step.">MISSION PLANNING</button><button type="button" id="command-open">⌘K · COMMAND MENU</button></div>
         <div class="compose-note"><span>Local session · messages sent to your configured model</span><label><input type="checkbox" id="speech">Read answers aloud</label></div>
         <div id="voice-controls" class="voice-controls"><label for="voice-select">Mac voice</label><select id="voice-select" aria-label="Installed Mac voice"><option value="Daniel">Daniel · British</option></select><button id="stop-speech" class="voice-button" type="button">Stop voice</button></div>
         <div id="speech-note" class="detail"></div>
@@ -91,18 +99,21 @@
       </div>
     </section>
   </main>
+  <div class="command-overlay" id="command-overlay" hidden><div class="command-panel" role="dialog" aria-modal="true" aria-label="Command palette"><div class="command-top"><span>J.A.R.V.I.S. / COMMAND DECK</span><button type="button" id="command-close" aria-label="Close command palette">✕</button></div><input type="text" id="command-filter" aria-label="Find a command" placeholder="Search commands, views, or diagnostics…"><div id="command-results" class="command-results"></div><p>Choose a command. Actions requiring computer access still need approval.</p></div></div>
   <script id="jarvis-config" type="application/json" nonce="__JARVIS_NONCE__">__JARVIS_BOOTSTRAP__</script>
   <script nonce="__JARVIS_NONCE__" src="/devices.js"></script>
   <script nonce="__JARVIS_NONCE__" src="/development.js"></script>
+  <script nonce="__JARVIS_NONCE__" src="/hud.js"></script>
   <script nonce="__JARVIS_NONCE__">
     'use strict';
     const bootstrap = document.getElementById('jarvis-config').textContent.trim();
     const config = bootstrap.startsWith('{') ? JSON.parse(bootstrap) : {
-      backendEnabled:false, csrfToken:'', speakAnswers:false, voice:'Daniel', maxPromptChars:8000
+      backendEnabled:true, hosted:true, csrfToken:'', speakAnswers:false, voice:'Daniel', maxPromptChars:4000
     };
     const $ = id => document.getElementById(id);
     const tokenHeaders = { 'X-Jarvis-Token':config.csrfToken };
-    let busy = false, speaking = false, mode = 'workspace', serverBusy = false;
+    let busy = false, speaking = false, mode = 'workspace', serverBusy = false, connected = false;
+    const hostedHistory = [];
     let devices = null, development = null, speechGeneration = 0, speechAudio = null, speechURL = null;
     const seenReminders = new Set();
     $('prompt').maxLength = config.maxPromptChars;
@@ -114,6 +125,7 @@
       box.append(label,content); $('messages').append(box); $('messages').scrollTop = $('messages').scrollHeight;
     }
     function updateOrbLabel() {
+      document.body.dataset.activity = speaking ? 'speaking' : busy || serverBusy ? 'processing' : 'ready';
       if (!config.backendEnabled) {
         $('orb-caption').textContent = mode === 'standby' ? 'Standing by.' : 'Orb interface preview';
         $('orb-note').textContent = 'Open local Jarvis for chat and live telemetry';
@@ -121,17 +133,19 @@
         return;
       }
       $('orb-caption').textContent = speaking ? 'Speaking, Sir.' : busy ? 'One moment, Sir.' : mode === 'standby' ? 'Standing by.' : 'At your service, Sir.';
-      $('orb-note').textContent = speaking ? 'Speaking aloud · microphone recording paused' : busy ? 'Working on your request' : 'Ready · device controls below';
+      $('orb-note').textContent = speaking ? 'Speaking aloud · microphone recording paused' : busy ? 'Working on your request' : config.hosted ? (connected ? 'Cloudflare AI · authenticated session' : 'Cloudflare Access authentication required') : 'Ready · device controls below';
       $('turn-state').textContent = speaking ? 'Speaking' : busy || serverBusy ? 'Working' : 'Ready';
     }
     document.querySelectorAll('nav button').forEach(button => button.addEventListener('click', () => {
       mode = button.dataset.mode; document.body.dataset.mode = mode;
+      $('hud-mode').textContent = mode.toUpperCase();
       document.querySelectorAll('nav button').forEach(other => other.setAttribute('aria-pressed', String(other === button)));
       updateOrbLabel();
     }));
     function stopSpeech() {
       speechGeneration++;
       if (speechAudio) { speechAudio.pause(); speechAudio.removeAttribute('src'); speechAudio.load(); speechAudio.hidden = true; speechAudio = null; }
+      if (config.hosted && 'speechSynthesis' in window) window.speechSynthesis.cancel();
       if (speechURL) { URL.revokeObjectURL(speechURL); speechURL = null; }
       speaking = false; if (devices) devices.setSpeaking(false); updateOrbLabel();
     }
@@ -139,6 +153,14 @@
     $('stop-speech').addEventListener('click',stopSpeech);
     async function speak(text) {
       if (!$('speech').checked || !config.backendEnabled) return;
+      if (config.hosted) {
+        if (!('speechSynthesis' in window)) { $('speech-note').textContent='Browser speech is unavailable.'; return; }
+        stopSpeech();const utterance=new SpeechSynthesisUtterance(text.slice(0,1600));
+        utterance.lang='en-GB';utterance.rate=.95;speaking=true;updateOrbLabel();
+        utterance.onend=()=>{speaking=false;updateOrbLabel();};
+        utterance.onerror=()=>{speaking=false;updateOrbLabel();$('speech-note').textContent='Browser speech could not play.';};
+        window.speechSynthesis.speak(utterance);return;
+      }
       stopSpeech(); const generation = speechGeneration;
       const voice = $('voice-select').value || config.voice;
       speaking = true; if (devices) devices.setSpeaking(true); updateOrbLabel();
@@ -184,7 +206,12 @@
       addMessage('YOU',prompt,'user');
       let requestId = null;
       try {
-        const job = await api('/api/chat', { method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt}) });
+        const job = await api('/api/chat', { method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(config.hosted?{prompt,history:hostedHistory.slice(-12)}:{prompt}) });
+        if (job.status === 'complete') {
+          addMessage('JARVIS',job.reply);speak(job.reply);
+          if (config.hosted) {hostedHistory.push({role:'user',content:prompt},{role:'assistant',content:job.reply});while(hostedHistory.length>12)hostedHistory.shift();}
+          return;
+        }
         requestId = job.request_id;
         let failures = 0, announced = false;
         while (true) {
@@ -206,11 +233,11 @@
     }
     $('chat-form').addEventListener('submit',event => { event.preventDefault(); submitChat($('prompt').value); });
     devices = window.JarvisDevices.mount({
-      container:$('device-panel'), enabled:config.backendEnabled, api, addMessage,
+      container:$('device-panel'), enabled:config.backendEnabled&&!config.hosted, api, addMessage,
       onTranscript:text => { if (busy || serverBusy) { $('prompt').value=text.slice(0,config.maxPromptChars); addMessage('SYSTEM','Transcript ready in the message box.','system'); } else submitChat(text); },
       onAnalysis:reply => { addMessage('JARVIS',reply); speak(reply); }
     });
-    development = window.JarvisDevelopment.mount({container:$('development-panel'),enabled:config.backendEnabled,api,addMessage});
+    development = window.JarvisDevelopment.mount({container:$('development-panel'),enabled:config.backendEnabled&&!config.hosted,api,addMessage});
     window.addEventListener('pagehide',stopSpeech);
     function showSettings(state) {
       $('full-access').checked = state.full_access;
@@ -243,8 +270,19 @@
     async function refreshStatus() {
       try {
         const state = await api('/api/status');
-        $('connection').textContent = 'Local systems connected'; $('connection').classList.add('online');
+        $('connection').textContent = config.hosted ? 'Cloudflare AI connected' : 'Local systems connected'; $('connection').classList.add('online');
+        connected = true;
         serverBusy = state.busy; updateOrbLabel();
+        if (config.hosted) {
+          $('cpu-detail').textContent='Requires optional Mac companion';
+          $('memory-detail').textContent='Not exposed to hosted websites';
+          $('disk-detail').textContent='Local device not connected';
+          $('network-detail').textContent='Local network monitoring unavailable';
+          $('gpu-detail').textContent='Cloud model: '+(state.model||'Workers AI');
+          $('uptime').textContent='CLOUD';$('sample-time').textContent='Stateless Worker · no device telemetry';
+          $('monitor-errors').textContent='Hosted mode does not expose Mac tools.';
+          return;
+        }
         development.refresh(state);
         if (state.settings && !$('full-access').disabled && !$('full-memory').disabled) showSettings(state.settings);
         setPercent('cpu',state.cpu_percent);
@@ -262,10 +300,21 @@
         $('sample-time').textContent = 'Sampled '+new Date(state.timestamp).toLocaleTimeString();
         $('monitor-errors').textContent = (state.errors || []).join(' ');
         for (const reminder of state.reminders || []) { const key = String(reminder.id); if (!seenReminders.has(key)) { seenReminders.add(key); addMessage('REMINDER',reminder.text,'system'); } }
-      } catch (error) { $('connection').textContent = 'Local server unavailable'; $('connection').classList.remove('online'); }
-      setTimeout(refreshStatus,5000);
+      } catch (error) { connected = false; $('connection').textContent = config.hosted ? 'Cloudflare Access / AI unavailable' : 'Local server unavailable'; $('connection').classList.remove('online'); updateOrbLabel(); }
+      finally { setTimeout(refreshStatus,config.hosted?30000:5000); }
     }
-    if (config.backendEnabled) {
+    if (config.hosted) {
+      $('access-panel').hidden=true;
+      $('device-panel').hidden=true;$('development-panel').hidden=true;
+      $('voice-controls').hidden=true;
+      $('speech-note').textContent='Optional browser speech · controlled by your browser';
+      const diagnosticButton=document.querySelector('#quick-actions [data-command^="Give me a concise status report"]');
+      if(diagnosticButton){diagnosticButton.textContent='CLOUD STATUS';diagnosticButton.dataset.command='Explain what you can verify about your cloud session, and what local machine telemetry you cannot see.';}
+      document.querySelector('.compose-note span').textContent='Cloudflare Workers AI · conversation held in this tab · not ChatGPT Plus';
+      document.querySelector('.policy').textContent='Cloud mode: no local files, desktop automation, or machine telemetry. Your account access is managed by Cloudflare Access.';
+      $('connection').textContent='Checking Cloudflare Access…';
+      refreshStatus();
+    } else if (config.backendEnabled) {
       $('access-panel').hidden = false;
       loadVoices();
       refreshStatus();
@@ -287,32 +336,11 @@
       }
       updateOrbLabel();
     }
-    const canvas = $('orb'), ctx = canvas.getContext('2d');
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const particles = Array.from({length:350}, (_,i) => {
-      const y = 1 - 2*(i+.5)/350, radius = Math.sqrt(1-y*y), angle = i * Math.PI * (3-Math.sqrt(5));
-      return { x:Math.cos(angle)*radius, y, z:Math.sin(angle)*radius };
+    window.JarvisHUD.mount({
+      canvas:$('orb'), stage:$('hologram-stage'), addMessage,
+      getState:() => ({speaking,busy:busy||serverBusy,mode,connected:config.backendEnabled&&connected}),
+      local:config.backendEnabled, submitChat, setMode:next=>document.querySelector('nav button[data-mode="'+next+'"]').click()
     });
-    let lastFrame = 0;
-    function draw(time) {
-      requestAnimationFrame(draw); if (time-lastFrame < (reducedMotion.matches ? 500 : 32)) return; lastFrame = time;
-      const w = canvas.clientWidth,h = canvas.clientHeight,dpr = Math.min(window.devicePixelRatio || 1,2);
-      if (canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)) { canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr); }
-      ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
-      const t = reducedMotion.matches ? 0 : time/1000, spin = t*.13;
-      // Speech events change the animation; this is not an audio amplitude meter.
-      const breath = reducedMotion.matches ? 1 : 1+.025*Math.sin(t*1.4)+(speaking ? .05*Math.sin(t*9) : 0);
-      const r = Math.min(w*.29,h*.34)*breath,cx = w/2,cy = h/2;
-      const glow = ctx.createRadialGradient(cx,cy,0,cx,cy,r*1.7);
-      glow.addColorStop(0,'rgba(51,174,245,.14)'); glow.addColorStop(.65,'rgba(26,149,236,.045)'); glow.addColorStop(1,'rgba(26,149,236,0)');
-      ctx.fillStyle = glow; ctx.fillRect(0,0,w,h);
-      ctx.strokeStyle = 'rgba(59,181,243,.16)'; ctx.lineWidth = .8;
-      for (let i=0;i<3;i++) { ctx.beginPath(); ctx.ellipse(cx,cy,r*(1.14+i*.14),r*(.25+i*.04),-.2+i*.14,0,Math.PI*2); ctx.stroke(); }
-      const dots = particles.map(p => { const x = p.x*Math.cos(spin)-p.z*Math.sin(spin), z = p.x*Math.sin(spin)+p.z*Math.cos(spin); return { x:cx+x*r, y:cy+p.y*r, z }; }).sort((a,b)=>a.z-b.z);
-      for (const p of dots) { const alpha = .2 + (p.z+1)*.35; ctx.fillStyle = 'rgba(85,211,255,'+alpha+')'; ctx.beginPath(); ctx.arc(p.x,p.y,(1.1+(p.z+1)*.45)*(speaking ? 1.25:1),0,Math.PI*2); ctx.fill(); }
-      ctx.strokeStyle = 'rgba(87,210,255,.25)'; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
-    }
-    if (ctx) requestAnimationFrame(draw);
   </script>
 </body>
 </html>

@@ -269,13 +269,15 @@ Google native: put OAuth desktop credentials at `~/.jarvis/google/credentials.js
 
 ## Cloudflare deployment
 
-Cloudflare hosts the cinematic interface together with a **separate, Access-protected**
-Workers AI backend. The model is Cloudflare's Llama 3.1 8B, not the model behind
-ChatGPT Plus; its daily free allocation is limited. Cloudflare Access must be
-configured before cloud chat works. `npm ci`, `npm test`, and `npm run check`
-validate the deployment locally without publishing. Read
-[Cloudflare-deployment.md](Cloudflare-deployment.md) for authentication,
-deployment, testing, costs, and the local-companion architecture.
+Cloudflare hosts the cinematic interface with **public, Turnstile-verified,
+rate-limited** Workers AI chat. The model is Cloudflare's Llama 3.1 8B, not the
+model behind ChatGPT Plus; its daily free allocation is limited. An existing
+Turnstile widget verifies each hosted chat message, and a SQLite Durable Object
+enforces per-visitor and site-wide usage ceilings. The site does not need a Mac
+to answer public text chat. `npm ci`, `npm test`, and `npm run check` validate
+the deployment locally without publishing. Read
+[Cloudflare-deployment.md](Cloudflare-deployment.md) for security, deployment,
+testing, costs, and the local-companion architecture.
 
 ## Validation
 

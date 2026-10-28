@@ -2,7 +2,7 @@
   "name": "jarvis-interface-preview",
   "version": "0.1.0",
   "private": true,
-  "description": "Access-protected Cloudflare Workers AI interface and local Jarvis companion",
+  "description": "Public Turnstile-verified Cloudflare Workers AI interface and local Jarvis companion",
   "engines": {
     "node": ">=22.0.0"
   },
@@ -10,7 +10,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "check": "wrangler deploy --dry-run",
-    "test": "node --test cloudflare-worker.test.mjs"
+    "test": "node --experimental-loader ./cloudflare-test-loader.mjs --test cloudflare-worker.test.mjs cloudflare-public-worker.test.mjs"
   },
   "dependencies": {
     "jose": "^6.1.0"

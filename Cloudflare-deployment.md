@@ -1,73 +1,88 @@
-# Cloudflare interface preview
+# J.A.R.V.I.S. — Cloudflare deployment (public, verified chat)
 
-Cloudflare hosts the static orb interface from `web/index.html`. The hosted page
-identifies itself as an interface preview and links to the local assistant at
-`http://127.0.0.1:8765`. Chat, local model inference, memory, reminders, telemetry,
-and Mac desktop tools run in the Python application on your Mac; this deployment
-does not provide an online assistant backend.
+The Cloudflare build is an original, interactive cinematic HUD with public,
+Turnstile-verified, rate-limited conversation using Cloudflare Workers AI.
+It does **not** use ChatGPT Plus, expose visitors' Mac files or devices, or run
+Ollama in the cloud. The optional local Python companion remains separate.
 
-## Fix the static-files detection error
+## 1. Managed Turnstile verification
 
-The error `Could not detect a directory containing static files` means Wrangler
-could not locate an asset directory. This repository's `wrangler.jsonc` explicitly
-sets `assets.directory` to `./web`. No JavaScript Worker entry point or frontend
-compilation is needed for this assets-only deployment.
+The approved Turnstile widget **JARVIS Public Chat** is registered for only
+`j-a-r-v-i-s.business-exodusindustries.workers.dev`, with public sitekey
+`0x4AAAAAAFo6JY22BhMNI09Q`. The corresponding secret is stored as
+`TURNSTILE_SECRET` in the existing Cloudflare Worker `j-a-r-v-i-s` and must
+**never** be copied into code, GitHub, or the browser.
 
-Use the branch containing both `wrangler.jsonc` and `web/index.html`. These files
-are in PR #1 on `feat/blueprint-capabilities`; `main` will contain them after the PR
-is merged. Retrying an earlier commit without these files repeats the error.
+`wrangler.jsonc` defines the public `TURNSTILE_SITEKEY` and exact production
+`TURNSTILE_HOSTNAME`, the `AI` binding, and the SQLite-backed
+`PUBLIC_CHAT_QUOTA` Durable Object. Do not remove these settings. A mismatched
+hostname, missing secret, missing quota binding, expired challenge, wrong
+action (`jarvis_chat`), or failed Siteverify call blocks chat.
 
-In the correct Cloudflare account, open **Workers & Pages → j-a-r-v-i-s → Settings
-→ Build** and set:
+The verification widget appears beneath the chat form only in hosted mode.
+Each message requires a fresh, single-use token; the browser resets the widget
+after every attempt. **The rest of the website remains public**, without an
+email login. Remove any Cloudflare Access application that you deliberately
+configured for the whole hostname if you intend the entire site to be public.
 
-| Setting | Value |
-| --- | --- |
-| Connected repository | `arcfieldlabs-hash/J.A.R.V.I.S.` |
-| Production branch | `feat/blueprint-capabilities` to test PR #1; `main` after merging |
-| Root directory | Repository root (leave empty) |
-| Build command | Leave empty |
-| Deploy command | `npx wrangler deploy` |
-| Build environment variable | `NODE_VERSION=22` |
+Only the production hostname is accepted by the backend; localhost is not an
+approved widget domain. Cloudflare docs: [Turnstile server-side verification](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/).
 
-Cloudflare installs the npm dependencies using the committed `package-lock.json`.
-The page is plain HTML with inline CSS and JavaScript, so no separate build step
-or output directory setting is required. Wrangler uses the configured `./web`
-directory relative to the repository root.
+## 2. Deploy the Cloudflare Worker
 
-After saving the settings, deploy the latest commit on that branch from the
-deployment history. Confirm the build log detects `wrangler.jsonc`, uploads the
-assets, and reports a successful deployment. Open the Worker URL and check that
-the page says it is an interface preview. A successful deployment has not been
-verified until Cloudflare reports success for the new commit.
+The repository already has `wrangler.jsonc`: `main` points to the Worker, the
+`AI` binding provides model inference, and static assets come from `./web`.
+For a Git-integrated build, select the repository's desired branch, keep the
+root directory at repository root, and use **`npx wrangler deploy`** as the
+deploy command. No separate frontend build is required. Do not deploy only
+`web/` as a static preview; the Worker entrypoint must be published too.
 
-If a later build reports an authentication error, check that the Git connection
-can read this repository and that the build's deployment token belongs to the
-correct Cloudflare account and has access to this Worker. Do not store account
-tokens or credentials in the repository.
-
-## Check locally
-
-Use Node.js 22 or newer:
+From your own machine, with Cloudflare authentication configured:
 
 ```bash
 npm ci
-npm run check
-npm run dev
+npm test
+npm run check    # dry-run only
+npm run deploy   # live deployment; requires your explicit approval
 ```
 
-`npm run check` validates the configuration with a deployment dry run; it does
-not publish. `npm run dev` serves the preview locally, normally at
-`http://localhost:8787`. Neither command starts the Python assistant.
+Test on the actual hostname in a browser and on a phone: the interface should
+load publicly, but chat should stay disabled until Turnstile completes. After
+verification, a chat request should return a model reply. Direct API calls
+without Turnstile should return HTTP 403. A replayed token should fail. Confirm
+the hourly and daily quota responses, and check Cloudflare's AI usage dashboard.
 
-To use chat and the local assistant, start Jarvis on your Mac:
+Public requests are limited by a strongly consistent SQLite Durable Object to
+**4 responses per visitor per hour**, **12 per visitor per UTC day**, and **60
+globally per UTC day**. Visitor IP addresses are converted to day-specific
+keyed digests; raw IPs are not retained in quota storage. These limits are
+conservative rollout safeguards and do not translate to an exact billing cap.
+
+## Cost and model disclosure
+
+- The current model is Cloudflare-hosted `@cf/meta/llama-3.1-8b-instruct-fp8`.
+- Workers AI provides a daily Free-plan Neuron allocation; exceeding it means
+  inference fails until reset if you remain on the Free plan. On a paid plan,
+  overage can be billed. Verify your Cloudflare plan and spending controls.
+- This is **not ChatGPT/GPT-6** and does **not** consume your ChatGPT Plus usage.
+- Conversation state is held only in the active browser tab (up to 8 recent
+  messages sent with each prompt); the Worker stores no chat transcripts.
+- Visitors should not enter secrets, company confidential data, or protected research into
+  the Cloudflare AI chat unless you have reviewed its applicable data terms.
+
+See [Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
+
+## Local companion
+
+The Cloudflare site cannot read process usage or files from a visitor's Mac.
+To use those capabilities, start the Python assistant locally instead:
 
 ```bash
+python3 -m pip install -e .
+ollama pull llama3.2:3b
 python3 -m jarvis --web --speak
 ```
 
-Then open `http://127.0.0.1:8765`. Keep the Python server bound to loopback. A full
-online assistant would need a separately designed backend for model inference,
-authentication, persistence, and permissions; Workers does not run this Mac's
-Ollama process, desktop tools, or SQLite database.
-
-Reference: [Cloudflare Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/).
+Open `http://127.0.0.1:8765`. Mac commands require explicit one-use approval
+cards; code development approvals are separate. Never expose the loopback
+server directly to the public Internet.

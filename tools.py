@@ -207,13 +207,23 @@ class ToolKit:
         command = str(args.get("command", "")).strip()
         if not command:
             return ToolResult(False, "Missing command.")
+        try:
+            lexer = shlex.shlex(command, posix=True, punctuation_chars="();<>|&")
+            lexer.whitespace_split = True
+            lexer.commenters = ""
+            argv = list(lexer)
+        except ValueError as exc:
+            return ToolResult(False, f"Invalid command quoting: {exc}")
+        if not argv or any(part in {";", "&&", "||", "|", "&", "<", ">", ">>", "(", ")"} or
+                           (part and set(part) <= set("();<>|&")) for part in argv):
+            return ToolResult(False, "Shell expressions, pipes, redirection, and chained commands are not supported.")
         if self._looks_dangerous(command):
             return ToolResult(False, "Blocked a command that looked destructive.")
         if not self._ask_permission(command, why):
             return ToolResult(False, "User denied command execution.")
 
         completed = subprocess.run(
-            command, shell=True, cwd=str(self.workspace),
+            argv, shell=False, cwd=str(self.workspace),
             capture_output=True, text=True, timeout=60,
         )
         output = "\n".join(part for part in [completed.stdout, completed.stderr] if part).strip()

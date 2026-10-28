@@ -45,7 +45,7 @@ class ExtensionTests(unittest.TestCase):
         permission = Mock(return_value=True)
         answer = self.registry.invoke("ext_echo", {"message": "hello"}, permission)
         self.assertTrue(answer["ok"], answer)
-        self.assertEqual(json.loads(answer["content"]), {"message": "hello", "workspace": str(self.workspace)})
+        self.assertEqual(json.loads(answer["content"]), {"message": "hello", "workspace": str(self.workspace.resolve())})
         action, details = permission.call_args.args
         self.assertEqual(action, "Run extension ext_echo")
         self.assertEqual(details["code"], SOURCE)

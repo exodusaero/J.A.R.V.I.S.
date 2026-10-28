@@ -48,10 +48,12 @@ class JarvisWebServer(ThreadingHTTPServer):
         self.assistant = assistant
         self.toolkit = toolkit
         self._previous_permission_handler = getattr(toolkit, "permission_handler", None)
-        toolkit.permission_handler = lambda command, why: False
+        self.approvals = ApprovalBroker()
+        toolkit.permission_handler = lambda command, why: self.approvals.request(
+            "Approve controlled computer action", {"command": command, "reason": why}
+        )
         self._previous_screen_capture = getattr(toolkit, "screen_capture_allowed", True)
         toolkit.screen_capture_allowed = False
-        self.approvals = ApprovalBroker()
         self._previous_development_permission = getattr(toolkit, "development_permission_handler", None)
         toolkit.development_permission_handler = self.approvals.request
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="jarvis-turn")
@@ -121,7 +123,7 @@ class JarvisWebServer(ThreadingHTTPServer):
         state = self.monitor.snapshot()
         with self._turn_lock:
             state["busy"] = self._busy
-        state["controlled_actions"] = "Use the CLI to approve controlled actions."
+        state["controlled_actions"] = "Review each controlled action in the local approval panel."
         state["devices"] = self.devices.snapshot()
         state["settings"] = self.settings_snapshot()
         state["development"] = self.development_snapshot()
@@ -309,7 +311,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", (
             "default-src 'none'; "
             f"script-src 'nonce-{self.server.script_nonce}'; "
-            "style-src 'unsafe-inline'; connect-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; connect-src 'self'; "
             "img-src 'self' data:; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         ))
         self.send_header("Connection", "close")
@@ -329,8 +331,10 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path in {"/", "/index.html"}:
             self._send(200, self.server.page, "text/html; charset=utf-8")
-        elif path in {"/devices.js", "/development.js"}:
+        elif path in {"/devices.js", "/development.js", "/hud.js"}:
             self._send(200, (Path(__file__).parent / "web" / path[1:]).read_bytes(), "text/javascript; charset=utf-8")
+        elif path == "/hud.css":
+            self._send(200, (Path(__file__).parent / "web" / "hud.css").read_bytes(), "text/css; charset=utf-8")
         elif path == "/api/status":
             if self._check_token():
                 self._json(200, self.server.status_snapshot())

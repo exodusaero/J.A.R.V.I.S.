@@ -84,6 +84,10 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("Access-Control-Allow-Origin", headers)
         self.assertEqual(self.request("GET", "/../tools.py")[0], 404)
         self.assertEqual(self.request("GET", "/web/index.html")[0], 404)
+        self.assertEqual(self.request("GET", "/hud.js")[0], 200)
+        css_status, css_headers, _ = self.request("GET", "/hud.css")
+        self.assertEqual(css_status, 200)
+        self.assertEqual(css_headers["Content-Type"], "text/css; charset=utf-8")
         self.assertEqual(self.server.server_address[0], "127.0.0.1")
 
     def test_local_bootstrap_enables_backend_and_safely_serializes_voice(self) -> None:
@@ -99,7 +103,7 @@ class WebTests(unittest.TestCase):
             self.assertEqual(config["csrfToken"], server.csrf_token)
             self.assertEqual(config["voice"], voice)
             self.assertNotIn(voice, page)
-            self.assertEqual(page.count("<script"), 4)
+            self.assertEqual(page.count("<script"), 5)
         finally:
             server.server_close()
 
@@ -125,7 +129,11 @@ class WebTests(unittest.TestCase):
         state = json.loads(body)
         self.assertIn("disk", state)
         self.assertIn("reminders", state)
-        self.assertIsNone(state["gpu"])
+        # Actual macOS runners may expose GPU metadata through ioreg.
+        # Either an unavailable GPU or a structured reading is valid.
+        if state["gpu"] is not None:
+            self.assertIsInstance(state["gpu"], dict)
+            self.assertIsInstance(state["gpu"]["name"], str)
         self.assertFalse(state["busy"])
 
     def test_validate_json_content_and_limits(self) -> None:
@@ -170,8 +178,23 @@ class WebTests(unittest.TestCase):
         self.assertEqual(result["error"], "Model unavailable")
         self.assertFalse(json.loads(self.request("GET", "/api/status")[2])["busy"])
 
-    def test_controlled_actions_denied_and_permission_handler_restored(self) -> None:
-        self.assertFalse(self.toolkit.permission_handler("dangerous command", "why"))
+    def test_controlled_actions_require_single_use_web_approval_and_restore_handler(self) -> None:
+        outcome = {}
+        worker = threading.Thread(target=lambda: outcome.update(approved=self.toolkit.permission_handler("pwd", "Read working directory")))
+        worker.start()
+        try:
+            import time
+            deadline=time.monotonic()+2
+            while not self.server.approvals.pending() and time.monotonic()<deadline:
+                time.sleep(.01)
+            pending=self.server.approvals.pending()
+            self.assertEqual(len(pending),1)
+            self.assertEqual(pending[0]["details"],{"command":"pwd","reason":"Read working directory"})
+            self.assertTrue(self.server.approvals.decide(pending[0]["id"], True))
+        finally:
+            self.server.approvals.cancel_all()
+            worker.join(timeout=2)
+        self.assertTrue(outcome["approved"])
         self.server.shutdown()
         self.server.server_close()
         self.assertIs(self.toolkit.permission_handler, self.original_permission)

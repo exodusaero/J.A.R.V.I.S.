@@ -1,8 +1,25 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "j-a-r-v-i-s",
-  "compatibility_date": "2026-10-03",
+  "compatibility_date": "2026-10-27",
+  "main": "./cloudflare-public-worker.mjs",
+  "vars": {
+    "TURNSTILE_SITEKEY": "0x4AAAAAAFo6JY22BhMNI09Q",
+    "TURNSTILE_HOSTNAME": "j-a-r-v-i-s.business-exodusindustries.workers.dev"
+  },
+  "ai": { "binding": "AI" },
+  "durable_objects": {
+    "bindings": [{ "name": "PUBLIC_CHAT_QUOTA", "class_name": "PublicChatQuota" }]
+  },
+  "migrations": [{ "tag": "public-chat-v1", "new_sqlite_classes": ["PublicChatQuota"] }],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 0.1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  },
   "assets": {
-    "directory": "./web"
+    "directory": "./web",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
   }
 }

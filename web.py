@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from html import escape as html_escape
 import secrets
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -35,17 +36,31 @@ class JarvisWebServer(ThreadingHTTPServer):
         voice: str = "Daniel",
         vision_model: str = "moondream",
         stt_model: str = "base",
+        tailnet_origin: str | None = None,
     ) -> None:
         # Port 0 is allowed by this testable factory; serve() validates user ports.
         if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
             raise ValueError("Web port must be an integer between 1 and 65535.")
+        if tailnet_origin is not None:
+            parsed = urlsplit(tailnet_origin)
+            hostname = parsed.hostname or ""
+            if (parsed.scheme != "https" or not hostname.endswith(".ts.net") or
+                    hostname.count(".") < 3 or parsed.username or parsed.password or
+                    parsed.path or parsed.query or parsed.fragment or
+                    tailnet_origin != f"https://{parsed.netloc}" or parsed.port is not None):
+                raise ValueError("--tailnet-origin must be an exact Tailscale HTTPS URL such as https://mac.tailnet.ts.net (no path or port).")
         super().__init__(("127.0.0.1", port), JarvisRequestHandler)
         actual_port = self.server_address[1]
         self.allowed_hosts = {f"127.0.0.1:{actual_port}", f"localhost:{actual_port}"}
         self.allowed_origins = {"http://" + host for host in self.allowed_hosts}
+        if tailnet_origin is not None:
+            self.allowed_hosts.add(parsed.netloc)
+            self.allowed_origins.add(tailnet_origin)
+        self.tailnet_origin = tailnet_origin
         self.csrf_token = secrets.token_urlsafe(32)
         self.script_nonce = secrets.token_urlsafe(24)
         self.assistant = assistant
+        self.chatgpt_plan = getattr(assistant, "plan", None)
         self.toolkit = toolkit
         self._previous_permission_handler = getattr(toolkit, "permission_handler", None)
         self.approvals = ApprovalBroker()
@@ -82,6 +97,7 @@ class JarvisWebServer(ThreadingHTTPServer):
             "speakAnswers": speak_answers,
             "voice": voice,
             "maxPromptChars": MAX_PROMPT_CHARS,
+            "chatgptPlan": self.chatgpt_plan is not None,
         }).replace("<", "\\u003c")
         template = (Path(__file__).parent / "web" / "index.html").read_text(encoding="utf-8")
         self.page = template.replace("__JARVIS_BOOTSTRAP__", bootstrap).replace(
@@ -128,6 +144,8 @@ class JarvisWebServer(ThreadingHTTPServer):
         state["settings"] = self.settings_snapshot()
         state["development"] = self.development_snapshot()
         state["approvals"] = self.approvals.pending()
+        if self.chatgpt_plan is not None:
+            state["chatgpt_plan"] = self.chatgpt_plan.status()
         return state
 
     def development_snapshot(self) -> dict[str, Any]:
@@ -144,6 +162,7 @@ class JarvisWebServer(ThreadingHTTPServer):
             "context_tokens": getattr(client, "num_ctx", None) or 2048,
             "vision_model": self.vision_model,
             "self_development": bool(getattr(getattr(self.toolkit, "development", None), "enabled", False)),
+            "chatgpt_plan": self.chatgpt_plan is not None,
         }
 
     def update_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -151,6 +170,8 @@ class JarvisWebServer(ThreadingHTTPServer):
             raise ValueError("Use full_access, full_memory, or self_development settings.")
         if any(type(value) is not bool for value in payload.values()):
             raise ValueError("Settings must be true or false.")
+        if self.chatgpt_plan is not None and "full_memory" in payload:
+            raise ValueError("Context configuration is managed by the ChatGPT plan model.")
         with self._turn_lock:
             client = getattr(self.assistant, "client", None)
             if "full_memory" in payload and client is None:
@@ -329,7 +350,24 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         if not self._check_local_request():
             return
         path = urlsplit(self.path).path
-        if path in {"/", "/index.html"}:
+        if path == "/auth/callback":
+            if self.server.chatgpt_plan is None:
+                self._json(404, {"error": "ChatGPT plan mode is not enabled."})
+                return
+            try:
+                message = self.server.chatgpt_plan.finish_sign_in(parse_qs(urlsplit(self.path).query))
+                status = 200
+            except (ValueError, RuntimeError, OSError) as exc:
+                message = str(exc)
+                status = 400
+            page = ("<!doctype html><html lang='en'><meta charset='utf-8'>"
+                    "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                    "<title>JARVIS ChatGPT connection</title>"
+                    "<body style='font:16px system-ui;background:#06121e;color:#def3ff;padding:3rem'>"
+                    "<h1>J.A.R.V.I.S. / ChatGPT</h1><p>" + html_escape(message) +
+                    "</p><a style='color:#5bddff' href='/'>Return to JARVIS</a></body></html>")
+            self._send(status, page.encode("utf-8"), "text/html; charset=utf-8")
+        elif path in {"/", "/index.html"}:
             self._send(200, self.server.page, "text/html; charset=utf-8")
         elif path in {"/devices.js", "/development.js", "/hud.js"}:
             self._send(200, (Path(__file__).parent / "web" / path[1:]).read_bytes(), "text/javascript; charset=utf-8")
@@ -338,6 +376,16 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/status":
             if self._check_token():
                 self._json(200, self.server.status_snapshot())
+        elif path == "/api/chatgpt/models":
+            if self._check_token():
+                if self.server.chatgpt_plan is None:
+                    self._json(404, {"error": "ChatGPT plan mode is not enabled."})
+                else:
+                    try:
+                        models = self.server.chatgpt_plan.models()
+                        self._json(200, {"models": models, "selected": self.server.chatgpt_plan.preferred_model})
+                    except (RuntimeError, OSError, ValueError) as exc:
+                        self._json(503, {"error": str(exc)})
         elif path.startswith("/api/chat/"):
             if self._check_token():
                 snapshot = self.server.job_snapshot(path.removeprefix("/api/chat/"))
@@ -398,7 +446,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         if not self._check_local_request() or not self._check_token():
             return
         path = urlsplit(self.path).path
-        if path not in {"/api/chat", "/api/devices", "/api/perception", "/api/transcribe", "/api/speech", "/api/settings", "/api/development/action"} and not path.startswith("/api/approvals/"):
+        if path not in {"/api/chat", "/api/chatgpt/start", "/api/chatgpt/model", "/api/devices", "/api/perception", "/api/transcribe", "/api/speech", "/api/settings", "/api/development/action"} and not path.startswith("/api/approvals/"):
             self._json(404, {"error": "Not found."})
             return
         if self.headers.get_content_type() != "application/json":
@@ -452,6 +500,19 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
             if path == "/api/devices":
                 state = self.server.devices.set_enabled(payload.get("source"), payload.get("enabled"))
                 self._json(200, state)
+                return
+            if path == "/api/chatgpt/start":
+                if self.server.chatgpt_plan is None:
+                    self._json(404, {"error": "ChatGPT plan mode is not enabled."})
+                    return
+                self._json(200, {"authorize_url": self.server.chatgpt_plan.start_sign_in()})
+                return
+            if path == "/api/chatgpt/model":
+                if self.server.chatgpt_plan is None:
+                    self._json(404, {"error": "ChatGPT plan mode is not enabled."})
+                    return
+                selected = self.server.chatgpt_plan.select_model(payload.get("slug"))
+                self._json(200, {"selected": selected})
                 return
             if path == "/api/settings":
                 self._json(200, self.server.update_settings(payload))
@@ -519,8 +580,9 @@ def create_server(
     voice: str = "Daniel",
     vision_model: str = "moondream",
     stt_model: str = "base",
+    tailnet_origin: str | None = None,
 ) -> JarvisWebServer:
-    return JarvisWebServer(assistant, toolkit, port=port, speak_answers=speak_answers, voice=voice, vision_model=vision_model, stt_model=stt_model)
+    return JarvisWebServer(assistant, toolkit, port=port, speak_answers=speak_answers, voice=voice, vision_model=vision_model, stt_model=stt_model, tailnet_origin=tailnet_origin)
 
 
 def serve(
@@ -532,16 +594,19 @@ def serve(
     voice: str = "Daniel",
     vision_model: str = "moondream",
     stt_model: str = "base",
+    tailnet_origin: str | None = None,
 ) -> int:
     if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
         print("JARVIS: Web port must be an integer between 1 and 65535.")
         return 1
     try:
-        server = create_server(assistant, toolkit, port=port, speak_answers=speak_answers, voice=voice, vision_model=vision_model, stt_model=stt_model)
-    except OSError as exc:
+        server = create_server(assistant, toolkit, port=port, speak_answers=speak_answers, voice=voice, vision_model=vision_model, stt_model=stt_model, tailnet_origin=tailnet_origin)
+    except (OSError, ValueError) as exc:
         print(f"JARVIS: Could not start the local web interface: {exc}")
         return 1
     print(f"JARVIS orb: http://127.0.0.1:{port} (Ctrl-C to stop).")
+    if tailnet_origin:
+        print(f"Private Tailnet HUD: {tailnet_origin} (configure Tailscale Serve separately).")
     print("British speech uses your Mac's installed voice. Camera, microphone and screens start off.")
     try:
         server.serve_forever(poll_interval=0.25)

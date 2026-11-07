@@ -16,6 +16,7 @@ browser = ["playwright>=1.48"]
 monitor = ["psutil>=5.9.6"]
 google = ["google-api-python-client>=2.100", "google-auth-httplib2>=0.2", "google-auth-oauthlib>=1.1"]
 menubar = ["rumps>=0.4"]
+chatgpt = ["PyJWT[crypto]>=2.10,<3"]
 
 [project.scripts]
 jarvis = "jarvis.cli:main"

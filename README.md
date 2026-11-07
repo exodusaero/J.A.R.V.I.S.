@@ -4,6 +4,67 @@
 Private local AI assistant inspired by Iron Man’s JARVIS.  
 Optimized by default for **Apple Silicon 16GB** (M1/M2/M3 Pro class).
 
+## Use your ChatGPT plan with JARVIS (no separate API credits)
+
+JARVIS has an optional **Sign in with ChatGPT** mode. It uses OpenAI's documented
+local/open-source OAuth connection and your ChatGPT plan allowance, not a
+pay-as-you-go API key. The existing Ollama mode is still available unchanged.
+This is a **text-conversation integration**, not a copy of the ChatGPT app:
+ChatGPT conversations, memories, files, tools and voice sessions are not imported.
+Usage is subject to your account's plan and app limits; availability is determined
+when you authorize the connection.
+
+On the Mac running JARVIS, from the repo's **parent directory** (after creating
+and activating a Python virtual environment):
+
+```bash
+python3 -m pip install -e './jarvis[chatgpt]'
+python3 -m jarvis --web --chatgpt-plan
+```
+
+Alternatively, if the checkout folder is not named `jarvis`, install from its
+actual path. Open **http://127.0.0.1:8765** on that Mac, choose **Continue with
+ChatGPT**, and approve plan usage in the browser. The browser must be on the Mac
+for the first OAuth loopback sign-in; once connected, the JARVIS HUD shows the
+active account and can chat through the plan. You can choose a preferred model
+with `--chatgpt-model MODEL_SLUG`. If unavailable, JARVIS uses the first listed
+model in your account's plan catalog.
+
+Credentials are saved in `~/.jarvis/chatgpt-plan/` with private filesystem
+permissions. **Never commit or share that folder.** Requests to OpenAI are sent
+from the Python host. The browser receives only local session state and chat
+text, not the OAuth access/refresh tokens. JARVIS saves successful conversation
+turns in its existing local SQLite history. The OAuth integration itself does not
+grant JARVIS any computer-control tools.
+
+### Access the same HUD from your phone or another laptop
+
+Install [Tailscale](https://tailscale.com/) on your Mac and your phone/laptop,
+log in to the same private tailnet, and restrict tailnet access to yourself.
+On the **Mac**, run `tailscale serve 8765` in a separate terminal; it should show
+a private HTTPS address such as `https://mac.my-tailnet.ts.net`. Do **not** use
+`tailscale funnel`, a public Cloudflare tunnel, or router port forwarding for
+this personal-control interface.
+
+Restart JARVIS with that **exact address** (without a trailing slash):
+
+```bash
+python3 -m jarvis --web --chatgpt-plan --tailnet-origin https://mac.my-tailnet.ts.net
+```
+
+Keep Tailscale Serve running on the Mac and open its HTTPS address on the
+phone/laptop. The JARVIS web server still binds exclusively to `127.0.0.1`,
+and accepts only that explicitly configured `.ts.net` web origin in addition to
+the local Mac origins. **Sign in from the Mac first.** If your Mac is off or
+asleep, the phone HUD will not work. Check your Tailscale ACLs: everyone with
+tailnet access to that machine's Serve endpoint can reach the HUD. Do not share
+that access with people you don't trust.
+
+This integration follows the official
+[Sign in with ChatGPT open-source guide](https://developers.openai.com/siwc/token-sharing-open-source),
+[authorization flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in),
+and [plan inference restrictions](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference).
+
 ## Quick start (MacBook 16GB)
 
 ```bash

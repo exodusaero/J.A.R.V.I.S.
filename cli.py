@@ -57,7 +57,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Local Ollama image model for enabled camera/screens (default: moondream).",
     )
     parser.add_argument("--web", action="store_true", help="Local orb, chat, and telemetry interface.")
+    parser.add_argument(
+        "--chatgpt-plan", action="store_true",
+        help="Use Sign in with ChatGPT plan inference in the local orb (no API key). Requires --web and .[chatgpt].",
+    )
+    parser.add_argument("--chatgpt-model", default="gpt-6.1-sol", help="Preferred model for ChatGPT plan mode.")
     parser.add_argument("--port", type=int, default=8765, help="Loopback web interface port.")
+    parser.add_argument(
+        "--tailnet-origin", default=None,
+        help="Allow an exact private Tailscale Serve HTTPS origin (https://machine.tailnet.ts.net) for phone access.",
+    )
     parser.add_argument("--doctor", action="store_true", help="Report model and optional dependency readiness.")
     parser.add_argument("--timeout", type=int, default=120, help="Ollama request timeout in seconds.")
     parser.add_argument(
@@ -123,6 +132,12 @@ def main(argv: list[str] | None = None) -> int:
     if sum(bool(value) for value in (args.web, args.listen, args.once, args.menubar)) > 1:
         print("Choose one of --web, --listen, --once, or --menubar.", file=sys.stderr)
         return 2
+    if args.chatgpt_plan and not args.web:
+        print("--chatgpt-plan currently requires --web for local OAuth sign-in.", file=sys.stderr)
+        return 2
+    if args.tailnet_origin and not args.web:
+        print("--tailnet-origin requires --web.", file=sys.stderr)
+        return 2
     if args.timeout <= 0 or (args.num_ctx is not None and args.num_ctx < 512):
         print("Use a positive --timeout and --num-ctx of at least 512.", file=sys.stderr)
         return 2
@@ -166,14 +181,23 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         print(f"Could not open Jarvis storage: {exc}", file=sys.stderr)
         return 1
-    assistant = JarvisAssistant(
-        client,
-        toolkit,
-        tools_enabled=not args.no_tools,
-        max_tool_rounds=LOWMEM_TOOL_ROUNDS if low_mem else 4,
-        history_limit=LOWMEM_HISTORY if low_mem else 20,
-        memory=toolkit.memory,
-    )
+    if args.chatgpt_plan:
+        from .chatgpt_plan import ChatGPTPlan, ChatGPTPlanAssistant
+        try:
+            plan = ChatGPTPlan(data_dir, port=args.port, model=args.chatgpt_model)
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"Could not initialize ChatGPT plan sign-in: {exc}", file=sys.stderr)
+            return 1
+        assistant = ChatGPTPlanAssistant(plan, toolkit)
+    else:
+        assistant = JarvisAssistant(
+            client,
+            toolkit,
+            tools_enabled=not args.no_tools,
+            max_tool_rounds=LOWMEM_TOOL_ROUNDS if low_mem else 4,
+            history_limit=LOWMEM_HISTORY if low_mem else 20,
+            memory=toolkit.memory,
+        )
 
     speak_answers = args.speak
     voice = args.voice
@@ -190,9 +214,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.web:
             from .web import serve
+            web_options = {"tailnet_origin": args.tailnet_origin} if args.tailnet_origin is not None else {}
             return serve(
                 assistant, toolkit, port=args.port, speak_answers=speak_answers,
                 voice=voice, vision_model=args.vision_model, stt_model=args.stt_model,
+                **web_options,
             )
         monitor.start()
         if args.once:

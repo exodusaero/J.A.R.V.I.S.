@@ -14,16 +14,15 @@ ChatGPT conversations, memories, files, tools and voice sessions are not importe
 Usage is subject to your account's plan and app limits; availability is determined
 when you authorize the connection.
 
-On the Mac running JARVIS, from the repo's **parent directory** (after creating
-and activating a Python virtual environment):
+On the Mac running JARVIS, from the **cloned repository directory** (after
+creating and activating a Python virtual environment):
 
 ```bash
-python3 -m pip install -e './jarvis[chatgpt]'
+python3 -m pip install -e '.[chatgpt]'
 python3 -m jarvis --web --chatgpt-plan
 ```
 
-Alternatively, if the checkout folder is not named `jarvis`, install from its
-actual path. Open **http://127.0.0.1:8765** on that Mac, choose **Continue with
+Open **http://127.0.0.1:8765** on that Mac, choose **Continue with
 ChatGPT**, and approve plan usage in the browser. The browser must be on the Mac
 for the first OAuth loopback sign-in; once connected, the JARVIS HUD shows the
 active account and can chat through the plan. You can choose a preferred model
